@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <script>
+      var me;
+      function init() {
+        var message = "";
+        var canvas = document.getElementById("canvas");
+        var ctx = canvas.getContext("2d");
+        var w = 300, h = 660;
+        fetch('/me').then((response) => {  //getting for id (combination is (0,1), (2,3)...)
+          if(!response.ok) {
+            throw new Error('HTTP error: ${response.status}')
+          }
+          return response.text();
+        }).then((text) => {
+          me = parseInt(text);
+        });
+
+        function paint() { //updating the display
+          ctx.fillStyle = "black";
+          ctx.fillRect(0,0,w,h);  
+          ctx.fillStyle = "black";
+          ctx.fillRect(w+60,0,w,h);
+          ctx.fillStyle = "red";
+          ctx.font = "Italic 50px Arial";
+          ctx.fillText(message,450,300);
+          if(message == "0") clearInterval(timer), start(); //play after 0s then start playing
+          message = "";
+        }
+
+        paint();
+        var timer;
+        document.getElementById("submit").onclick = function() {fetch('/start', { //"Ready" button click
+          method: 'POST',
+          body: me, //send the id
+        }).then((response) => {
+          if(!response.ok) {
+            throw new Error('HTTP error: ${response.status}')
+          }
+          return response.text();
+        }).then((text) => {
+          timer = setInterval(tick, 200); //get the opponent information for each 200ms
+          document.getElementById("submit").disabled = true;
+        })};
+
+        function tick() {
+          fetch('/wait', { //opponent infomation
+            method: 'POST',
+            body: me,
+          }).then((response) => {
+            if(!response.ok) {
+              throw new Error('HTTP error: ${response.status}')
+            }
+            return response.text();
+          }).then((text) => {
+            message = text;
+            paint();
+          });
+        }
+      }
+
+      function start() { //start playing
+        var canvas = document.getElementById("canvas");
+        var ctx = canvas.getContext("2d");
+        var message = "";
+        var orpause = 0;
+        var map = [], rot = [], mapx = 10, mapy = 22, fx = 3, fy = -1, speed = 12, now = [], keyCode, nowv, count = 0, be = 0, space = 2, score = 0;
+	//map: block already placed, rot: now placing(4*4) rotating, mapx, mapy: size of map, fx, fy: now placing position
+        var w = 300, h = 660;
+        var mapo = [];
+        document.getElementById("text").textContent = "your score: ";
+        for(var i = 0; i < mapy; ++i) {
+          map[i] = [], mapo[i] = [];
+          for(var j = 0; j < mapx; ++j) {
+            map[i][j] = 0, mapo[i][j] = 0;
+          }
+        }
+        var scorei = [0,1,3,5,8]; //adding score
+        var block = [[[0,0,0,0],
+                      [1,1,1,0],
+                      [0,0,1,0],
+                      [0,0,0,0]],
+                     [[0,0,0,0],
+                      [2,2,2,2],
+                      [0,0,0,0],
+                      [0,0,0,0]],
+                     [[0,0,0,0],
+                      [3,3,3,0],
+                      [3,0,0,0],
+                      [0,0,0,0]],
+                     [[0,0,0,0],
+                      [4,4,0,0],
+                      [0,4,4,0],
+                      [0,0,0,0]],
+                     [[0,0,0,0],
+                      [0,5,5,0],
+                      [5,5,0,0],
+                      [0,0,0,0]],
+                     [[0,0,0,0],
+                      [0,6,6,0],
+                      [0,6,6,0],
+                      [0,0,0,0]],
+                     [[0,0,0,0],
+                      [0,0,7,0],
+                      [0,7,7,7],
+                      [0,0,0,0]]]; //block information
+        nowv = Math.floor(Math.random() * 7); //dropping block
+        for(var i = 0; i < 4; ++i) {
+          now[i] = [];
+          rot[i] = [];
+          for(var j = 0; j < 4; ++j) {
+            now[i][j] = block[nowv][i][j];
+            rot[i][j] = 0;
+          }
+        }
+ 
+        paint();
+        var timer = setInterval(tick, 20);
+        var timer2 = setInterval(tick2, 200);
+        onkeydown = function(e) {
+          if(!be){
+            keyCode = e.keyCode; 
+            if(orpause && e.keyCode == 13) {
+              keyCode = 0;
+              timer = setInterval(tick,50);
+              orpause = 0;
+              message = "";
+            }
+          } //no meaning
+          be = 1;
+        }
+        onkeyup = function(e) {
+          keyCode = 0;
+          be = 0;
+        } 
+
+        function tick() {
+          count = (count + 1) % speed;
+          if(keyCode == 39) { //push "right" key
+            var s = 1;
+            keyCode = 0;
+            for(var i = 3; i > mapx - 2 - fx; --i) {
+              for(var j = 0; j < 4; ++j) {
+                if(now[j][i]) {s = 0; break;} //can't move to right (outside of map)
+              }
+              if(!s) break;
+            }
+            if(s) {
+              for(var i = 0; i < 4; ++i) {
+                for(var j = 0; j < 4; ++j) {
+                  if(now[i][j] && map[Math.max(fy + i, 0)][fx + j + 1]) {s = 0; break;} //can't move to right (already placed)
+                }
+              }
+            }
+            if(s) fx++;
+          }
+          if(keyCode == 37) { //push "left" key
+            var s = 1;
+            keyCode = 0;
+            for(var i = 0; i < -fx + 1; ++i) {
+              for(var j = 0; j < 4; ++j) {
+                if(now[j][i]) {s = 0; break;}
+              }
+              if(!s) break;
+            }
+            if(s) {
+              for(var i = 0; i < 4; ++i) {
+                for(var j = 0; j < 4; ++j) {
+                  if(now[i][j] && map[Math.max(fy + i, 0)][fx + j - 1]) {s = 0; break;}
+                }
+              }
+            }
+            if(s) fx--;
+          }
+          if(keyCode == 38) { //push "up" button (rotation)
+            var s = 1;
+            keyCode = 0;
+            for(var i = 0; i < 4; ++i) {
+              for(var j = 0; j < 4; ++j) {
+                rot[i][3 - j] = now[j][i]; //block rotation
+              }
+            }
+            for(var i = 0; i < -fx; ++i) {
+              for(var j = 0; j < 4; ++j) {
+                if(rot[j][i]) {s = 0; break;} //can't rotate (outside of map left)
+              }
+              if(!s) break;
+            }
+            if(s){
+              for(var i = 3; i > mapx - 1 - fx; --i) {
+                for(var j = 0; j < 4; ++j) {
+                  if(rot[j][i]) {s = 0; break;} //can't rotate (outside of map right)
+                }
+                if(!s) break;
+              }
+            }
+            if(s){
+              for(var i = 3; i > mapy - 1 - fy; --i) {
+                for(var j = 0; j < 4; ++j) {
+                  if(rot[i][j]) {s = 0; break;} //(outside of map up)
+                }
+                if(!s) break;
+              }
+            }
+            if(s) {
+              for(var i = 0; i < 4; ++i) {
+                for(var j = 0; j < 4; ++j) {
+                  if(rot[i][j] && map[Math.max(fy + i, 0)][fx + j]) {s = 0; break;} //(already placed)
+                }
+                if(!s) break;
+              }
+            }
+            if(s) {
+              for(var i = 0; i < 4; ++i) {
+                for(var j = 0; j < 4; ++j) {
+                  now[i][j] = rot[i][j]; //update block placing
+                }
+              }
+            }
+          }
+          if(!count || keyCode == 40) { //push "down" key or block down
+            var s = 1;
+            for(var i = 0; i < 4; ++i) {
+              for(var j = 0; j < 4; ++j) {
+                if(now[i][j]) {
+                  if(fy + i + 1 > mapy - 1) {
+                    s = 0; 
+		    break; //outside of map -> place
+                  } else if(map[fy + i + 1][fx + j]){
+                    s = 0; //already placed -> place
+                    break;
+                  }
+                }
+              }
+              if(!s) break;
+            }
+            if(s) fy++;
+            else check();
+          }
+          paint();
+        }
+
+        function tick2() {
+          var tmpmap = [];
+          for(var i = 0; i < mapy; ++i) {
+            tmpmap[i] = [];
+            for(var j = 0; j < mapx; ++j) {
+              tmpmap[i][j] = map[i][j];
+            }
+          }
+          for(var i = 0; i < 4; ++i) {
+            for(var j = 0; j < 4; ++j) {
+              if(now[i][j]) tmpmap[fy + i][fx + j] = now[i][j]; //map (as we can see)
+            }
+          }
+          var dataJSON = {map: tmpmap, me: me, end: 0};
+          fetch('/post', { //send now map data
+            method: 'POST',
+            body: JSON.stringify(dataJSON),
+          }).then((response) => {
+            if(!response.ok) {
+              throw new Error('HTTP error: ${response.status}')
+            }
+            return response.json();
+          }).then((json) => {
+            for(var i = 0; i < mapy; ++i) {
+              for(var j = 0; j < mapx; ++j) {
+                mapo[i][j] = json.map[i][j]; //oppsnent map
+              }
+            }
+            if(json.end) stop("win"); //opponent finished
+          });
+        }
+
+        function check() { //clearing check + fisnishing check
+          var c = 0;
+          for(var i = 0; i < 4; ++i) {
+            for(var j = 0; j < 4; ++j) {
+              if(now[i][j]) map[fy + i][fx + j] = now[i][j]; //place
+            }
+          }
+          for(var i = space; i < mapy;) {
+            var d = 1;
+            for(var j = 0; j < mapx; ++j) {
+	      if(!map[i][j]) {d = 0; break;} //there is no block -> not clearing
+            }
+            if(d) {
+              c++;
+              for(var k = i; k > 0; --k) {
+                for(var l = 0; l < mapx; ++l) {
+                  map[k][l] = map[k - 1][l]; //clearing process
+                }
+              }
+            }
+            else ++i;
+          }
+          var end = 1;
+          score += scorei[c];           
+          for(var i = 0; i < space; ++i) {
+            for(var j = 0; j < mapx; ++j) {
+              if(map[i][j]) {end = 0; stop("Game Over!");} //if there is block above the red line
+            }
+          }
+          if(end) {
+            nowv = Math.floor(Math.random() * 7);
+            for(var i = 0; i < 4; ++i) {
+              for(var j = 0; j < 4; ++j) {
+                now[i][j] = block[nowv][i][j]; //next block
+              }
+            }
+            fx = 3;
+            fy = -1;
+          }
+        }
+
+        function stop(msg) { //gameover or win
+          message = msg;
+          if(msg == "win") paint();
+          clearInterval(timer);
+          clearInterval(timer2);
+          if(msg == "Game Over!") { 
+	    var dataJSON = {map: map, me: me, end: 1};
+            fetch('/post', {
+              method: 'POST',
+              body: JSON.stringify(dataJSON), //finish signal
+            });
+	  }
+        }
+
+        function paint() { //update display
+          ctx.fillStyle = "black";
+          ctx.fillRect(0,0,w,h);
+          ctx.strokeStyle = "red";
+          ctx.beginPath();
+          ctx.moveTo(0,space * h / mapy);
+          ctx.lineTo(w,space * h / mapy);
+          ctx.stroke();
+          for(var i = 0; i < mapy; ++i) {
+            for(var j = 0; j < mapx; ++j) {
+              if(map[i][j]) {
+                if(map[i][j] == 1) ctx.fillStyle = "deepskyblue";
+                else if(map[i][j] == 2) ctx.fillStyle = "yellow";
+                else if(map[i][j] == 3) ctx.fillStyle = "lawngreen";
+                else if(map[i][j] == 4) ctx.fillStyle = "red";
+                else if(map[i][j] == 5) ctx.fillStyle = "blue";
+                else if(map[i][j] == 6) ctx.fillStyle = "orange";
+                else if(map[i][j] == 7) ctx.fillStyle = "purple";
+                ctx.fillRect(w / mapx * j, h / mapy * i, w / mapx, h / mapy);
+              }
+            }
+          }
+          for(var i = 0; i < 4; ++i) {
+            for(var j = 0; j < 4; ++j) {
+              if(now[i][j]) {
+                if(now[i][j] == 1) ctx.fillStyle = "deepskyblue";
+                else if(now[i][j] == 2) ctx.fillStyle = "yellow";
+                else if(now[i][j] == 3) ctx.fillStyle = "lawngreen";
+                else if(now[i][j] == 4) ctx.fillStyle = "red";
+                else if(now[i][j] == 5) ctx.fillStyle = "blue";
+                else if(now[i][j] == 6) ctx.fillStyle = "orange";
+                else if(now[i][j] == 7) ctx.fillStyle = "purple";
+                ctx.fillRect(w / mapx * (fx + j), h / mapy * (fy + i), w / mapx, h / mapy);
+              }
+            }
+          }
+          ctx.fillStyle = "red";
+          ctx.font = " Italic 50px Arial";
+          ctx.fillText(message,20,300);
+          message = "";
+          document.getElementById("score").textContent = score;
+          ctx.fillStyle = "black";
+          ctx.fillRect(w+60,0,w,h);
+          ctx.strokeStyle = "red";
+          ctx.beginPath();
+          ctx.moveTo(w+60,space * h / mapy);
+          ctx.lineTo(2*w+60,space * h / mapy);
+          ctx.stroke();
+          for(var i = 0; i < mapy; ++i) {
+            for(var j = 0; j < mapx; ++j) {
+              if(mapo[i][j]) {
+                if(mapo[i][j] == 1) ctx.fillStyle = "deepskyblue";
+                else if(mapo[i][j] == 2) ctx.fillStyle = "yellow";
+                else if(mapo[i][j] == 3) ctx.fillStyle = "lawngreen";
+                else if(mapo[i][j] == 4) ctx.fillStyle = "red";
+                else if(mapo[i][j] == 5) ctx.fillStyle = "blue";
+                else if(mapo[i][j] == 6) ctx.fillStyle = "orange";
+                else if(mapo[i][j] == 7) ctx.fillStyle = "purple";
+                ctx.fillRect(w + 60 + w / mapx * j, h / mapy * i, w / mapx, h / mapy);
+              }
+            }
+          }
+        }
+      }
+
+      window.onload = init; //initialize
+    </script>
+  </head>
+  <body>
+    <canvas width="700" height="660" id="canvas"></canvas><br>
+    <span id="text"></span><span id="score"></span>
+    <button id="submit">Ready</button>
+  </body>
+</html>
